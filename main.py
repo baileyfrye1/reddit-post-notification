@@ -1,20 +1,13 @@
 import asyncio
 import os
+import signal
 
 import asyncpraw
-from dotenv import load_dotenv
 
 from discord_setup import client, start_discord
 
-load_dotenv()
 
-
-async def monitor_reddit():
-    reddit = asyncpraw.Reddit(
-        client_id=os.getenv("REDDIT_CLIENT_ID"),
-        client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
-        user_agent="Reddit Post Notification Bot",
-    )
+async def monitor_reddit(reddit):
     subreddit = await reddit.subreddit("fantasyromance")
 
     async for submission in subreddit.stream.submissions():
@@ -25,7 +18,29 @@ async def monitor_reddit():
 
 
 async def main():
-    await asyncio.gather(start_discord(), monitor_reddit())
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, stop_event.set)
+
+    reddit = asyncpraw.Reddit(
+        client_id=os.getenv("REDDIT_CLIENT_ID"),
+        client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
+        user_agent="Reddit Post Notification Bot",
+    )
+
+    monitor_task = asyncio.create_task(monitor_reddit(reddit))
+    discord_task = asyncio.create_task(start_discord())
+
+    await stop_event.wait()
+
+    # On signal, cancel tasks and cleanup
+    monitor_task.cancel()
+    discord_task.cancel()
+
+    await reddit.close()
+    await client.close()
 
 
 if __name__ == "__main__":

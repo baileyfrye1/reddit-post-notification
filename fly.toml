@@ -1,0 +1,12 @@
+app = "reddit-post-notification"
+primary_region = "atl"
+
+[build]
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[processes]
+  app = "python main.py"
