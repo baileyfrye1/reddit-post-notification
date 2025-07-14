@@ -31,10 +31,6 @@ class DiscordClient(discord.Client):
         else:
             print("Channel not found")
 
-    async def close(self):
-        await super().close()
-        print("Discord client closed")
-
 
 handler = logging.FileHandler(filename="discord.log", encoding="utf-8", mode="w")
 intents = discord.Intents.default()
@@ -46,5 +42,10 @@ client = DiscordClient(intents=intents)
 
 
 async def start_discord():
-    if discord_token:
-        await client.start(discord_token)
+    for i in range(0, 6):
+        try:
+            await client.start(discord_token)
+            break
+        except Exception as e:
+            print(f"Discord client start failed (attempt {i + 1}): {e}")
+            continue
