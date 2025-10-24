@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import signal
 
@@ -8,6 +9,14 @@ from discord_setup import client, start_discord
 
 shutdown_event = asyncio.Event()
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+logger = logging.getLogger(__name__)
+
 
 async def monitor_reddit(reddit):
     subreddit = await reddit.subreddit("fantasyromance")
@@ -16,6 +25,8 @@ async def monitor_reddit(reddit):
             await client.send_message(
                 f"New submission from XusBookReviews: {submission.title}\nhttps://reddit.com{submission.permalink}"
             )
+        else:
+            logger.info("No new submission found")
         if shutdown_event.is_set():
             break
 
@@ -36,7 +47,7 @@ async def connect_reddit_with_retries(max_retries=5):
             await reddit.user.me()
             return reddit
         except Exception as e:
-            print(f"Retry {attempt}: Reddit connection failed: {e}")
+            logger.warning(f"Retry {attempt}: Reddit connection failed: {e}")
             await asyncio.sleep(2**attempt)
     raise RuntimeError("Reddit connection failed after max retries.")
 
@@ -45,24 +56,21 @@ async def main():
     await handle_signals()
     reddit = await connect_reddit_with_retries()
 
-    reddit_task = asyncio.create_task(monitor_reddit(reddit))
-    discord_task = asyncio.create_task(start_discord())
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(monitor_reddit(reddit))
+        tg.create_task(start_discord())
 
-    await shutdown_event.wait()
-    print("Shutdown initiated...")
+        await shutdown_event.wait()
+        logger.info("Shutdown initiated...")
 
-    reddit_task.cancel()
-    discord_task.cancel()
-
-    await asyncio.gather(reddit_task, discord_task, return_exceptions=True)
     await reddit.close()
     await client.close()
 
-    print("Graceful shutdown complete.")
+    logger.info("Graceful shutdown complete.")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Forced shutdown.")
+        logger.error("Forced shutdown.")
